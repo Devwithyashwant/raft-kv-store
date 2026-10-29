@@ -8,6 +8,8 @@ public class RaftKvStoreApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(RaftKvStoreApplication.class, args);
+		RaftNode node = new RaftNode("node-1");
+		System.out.println(node);
 	}
 
 }
