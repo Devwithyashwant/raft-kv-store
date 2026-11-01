@@ -57,6 +57,24 @@ public class RaftNode {
         this.role = NodeRole.CANDIDATE;
     }
 
+    public boolean receiveVoteRequest(int candidateTerm, String candidateId) {
+        if (candidateTerm < this.currentTerm) {
+            return false;
+        }
+
+        if (candidateTerm > this.currentTerm) {
+            this.currentTerm = candidateTerm;
+            this.votedFor = null;
+            this.role = NodeRole.FOLLOWER;
+        }
+
+        if (this.votedFor == null || this.votedFor.equals(candidateId)) {
+            this.votedFor = candidateId;
+            return true;
+        }
+
+        return false;
+    }
 
     @Override
     public String toString(){

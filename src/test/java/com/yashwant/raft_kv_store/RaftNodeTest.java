@@ -36,4 +36,96 @@ public class RaftNodeTest {
 
         assertEquals(3,node.getCurrentTerm(), "Term should increment once per election call");
     }
+    @Test
+    void grantsVoteWhenNoPriorVoteAndSameOrHigherTerm() {
+        RaftNode node = new RaftNode("node-1");
+
+        boolean granted = node.receiveVoteRequest(1, "node-2");
+
+        assertTrue(granted);
+        assertEquals("node-2", node.getVotedFor());
+        assertEquals(1, node.getCurrentTerm());
+    }
+
+    @Test
+    void rejectsVoteFromOlderTerm() {
+        RaftNode node = new RaftNode("node-1");
+        node.setCurrentTerm(5);
+
+        boolean granted = node.receiveVoteRequest(3, "node-2");
+
+        assertFalse(granted);
+    }
+
+    @Test
+    void rejectsSecondVoteRequestInSameTermFromDifferentCandidate() {
+        RaftNode node = new RaftNode("node-1");
+
+        node.receiveVoteRequest(1, "node-2");
+        boolean secondGranted = node.receiveVoteRequest(1, "node-3");
+
+        assertFalse(secondGranted);
+        assertEquals("node-2", node.getVotedFor(), "Vote should remain with the first candidate");
+    }
+    @Test
+    void candidateBecomesLeaderWithMajorityVotes() {
+        RaftNode candidate = new RaftNode("node-1");
+        RaftNode follower1 = new RaftNode("node-2");
+        RaftNode follower2 = new RaftNode("node-3");
+
+        candidate.startElection();
+
+        int votesReceived = 1; // candidate votes for itself
+
+        boolean vote1 = follower1.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        if (vote1) {
+            votesReceived++;
+        }
+
+        boolean vote2 = follower2.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        if (vote2) {
+            votesReceived++;
+        }
+
+        int clusterSize = 3;
+        int majorityNeeded = (clusterSize / 2) + 1;
+
+        boolean wonElection = votesReceived >= majorityNeeded;
+        if (wonElection) {
+            candidate.setRole(NodeRole.LEADER);
+        }
+
+        assertTrue(wonElection, "Candidate should win with a majority of votes");
+        assertEquals(NodeRole.LEADER, candidate.getRole());
+        assertEquals(3, votesReceived, "Candidate should receive all 3 votes (itself + 2 followers)");
+    }
+
+    @Test
+    void candidateLosesElectionIfVotesAlreadyCastElsewhere() {
+        RaftNode candidate = new RaftNode("node-1");
+        RaftNode follower1 = new RaftNode("node-2");
+        RaftNode follower2 = new RaftNode("node-3");
+
+        // Both followers already voted for a different candidate in term 1
+        follower1.receiveVoteRequest(1, "node-4");
+        follower2.receiveVoteRequest(1, "node-4");
+
+        candidate.startElection(); // candidate is now term 1, voted for itself
+
+        int votesReceived = 1;
+
+        boolean vote1 = follower1.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        if (vote1) votesReceived++;
+
+        boolean vote2 = follower2.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        if (vote2) votesReceived++;
+
+        int clusterSize = 3;
+        int majorityNeeded = (clusterSize / 2) + 1;
+
+        boolean wonElection = votesReceived >= majorityNeeded;
+
+        assertFalse(wonElection, "Candidate should lose - both other votes already committed elsewhere");
+        assertEquals(1, votesReceived, "Only the candidate's own self-vote should count");
+    }
 }
