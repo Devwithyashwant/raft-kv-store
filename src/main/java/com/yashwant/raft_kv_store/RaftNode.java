@@ -35,9 +35,33 @@ public class RaftNode {
         return log;
     }
 
+    public void setCurrentTerm(int currentTerm){
+        this.currentTerm = currentTerm;
+    }
+
+    public void setVotedFor(String votedFor){
+        this.votedFor = votedFor;
+    }
+
+    public String getVotedFor(){
+        return votedFor;
+    }
+
+    public void setRole(NodeRole role){
+        this.role = role;
+    }
+
+    public void startElection(){
+        this.currentTerm = this.currentTerm + 1;
+        this.votedFor = this.nodeId;
+        this.role = NodeRole.CANDIDATE;
+    }
+
+
     @Override
     public String toString(){
         return "RaftNode{id='" + nodeId + "' , term=" +currentTerm + ", role =" + role + ", logSize=" +log.size() + "}";
     }
+
 }
 
