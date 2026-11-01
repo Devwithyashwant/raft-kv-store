@@ -128,4 +128,15 @@ public class RaftNodeTest {
         assertFalse(wonElection, "Candidate should lose - both other votes already committed elsewhere");
         assertEquals(1, votesReceived, "Only the candidate's own self-vote should count");
     }
+    @Test
+    void rejectsVoteWhenCandidateLogIsShorterThanVoterLog() {
+        RaftNode node = new RaftNode("node-1");
+        node.getLog().add(new LogEntry(1, "x=1"));
+        node.getLog().add(new LogEntry(1, "x=2"));
+
+        // Candidate claims only 1 log entry, but voter already has 2
+        boolean granted = node.receiveVoteRequest(1, "node-2", 1);
+
+        assertFalse(granted, "Should reject candidate whose log is shorter than voter's own");
+    }
 }
