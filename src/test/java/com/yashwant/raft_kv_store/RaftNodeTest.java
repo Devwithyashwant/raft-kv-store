@@ -1,6 +1,6 @@
 package com.yashwant.raft_kv_store;
 
-import  org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class RaftNodeTest {
@@ -21,10 +21,8 @@ public class RaftNodeTest {
         node.startElection();
 
         assertEquals(1, node.getCurrentTerm(), "Term should increment by 1");
-        assertEquals(NodeRole.CANDIDATE, node.getRole(), "Mode should become a candidate");
+        assertEquals(NodeRole.CANDIDATE, node.getRole(), "Node should become a candidate");
         assertEquals("node-1", node.getVotedFor(), "Node should vote for itself");
-
-
     }
 
     @Test
@@ -34,13 +32,14 @@ public class RaftNodeTest {
         node.startElection();
         node.startElection();
 
-        assertEquals(3,node.getCurrentTerm(), "Term should increment once per election call");
+        assertEquals(3, node.getCurrentTerm(), "Term should increment once per election call");
     }
+
     @Test
     void grantsVoteWhenNoPriorVoteAndSameOrHigherTerm() {
         RaftNode node = new RaftNode("node-1");
 
-        boolean granted = node.receiveVoteRequest(1, "node-2");
+        boolean granted = node.receiveVoteRequest(1, "node-2", 0);
 
         assertTrue(granted);
         assertEquals("node-2", node.getVotedFor());
@@ -52,7 +51,7 @@ public class RaftNodeTest {
         RaftNode node = new RaftNode("node-1");
         node.setCurrentTerm(5);
 
-        boolean granted = node.receiveVoteRequest(3, "node-2");
+        boolean granted = node.receiveVoteRequest(3, "node-2", 0);
 
         assertFalse(granted);
     }
@@ -61,12 +60,13 @@ public class RaftNodeTest {
     void rejectsSecondVoteRequestInSameTermFromDifferentCandidate() {
         RaftNode node = new RaftNode("node-1");
 
-        node.receiveVoteRequest(1, "node-2");
-        boolean secondGranted = node.receiveVoteRequest(1, "node-3");
+        node.receiveVoteRequest(1, "node-2", 0);
+        boolean secondGranted = node.receiveVoteRequest(1, "node-3", 0);
 
         assertFalse(secondGranted);
         assertEquals("node-2", node.getVotedFor(), "Vote should remain with the first candidate");
     }
+
     @Test
     void candidateBecomesLeaderWithMajorityVotes() {
         RaftNode candidate = new RaftNode("node-1");
@@ -77,12 +77,12 @@ public class RaftNodeTest {
 
         int votesReceived = 1; // candidate votes for itself
 
-        boolean vote1 = follower1.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        boolean vote1 = follower1.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId(), 0);
         if (vote1) {
             votesReceived++;
         }
 
-        boolean vote2 = follower2.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        boolean vote2 = follower2.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId(), 0);
         if (vote2) {
             votesReceived++;
         }
@@ -107,17 +107,17 @@ public class RaftNodeTest {
         RaftNode follower2 = new RaftNode("node-3");
 
         // Both followers already voted for a different candidate in term 1
-        follower1.receiveVoteRequest(1, "node-4");
-        follower2.receiveVoteRequest(1, "node-4");
+        follower1.receiveVoteRequest(1, "node-4", 0);
+        follower2.receiveVoteRequest(1, "node-4", 0);
 
         candidate.startElection(); // candidate is now term 1, voted for itself
 
         int votesReceived = 1;
 
-        boolean vote1 = follower1.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        boolean vote1 = follower1.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId(), 0);
         if (vote1) votesReceived++;
 
-        boolean vote2 = follower2.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId());
+        boolean vote2 = follower2.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId(), 0);
         if (vote2) votesReceived++;
 
         int clusterSize = 3;

@@ -57,7 +57,7 @@ public class RaftNode {
         this.role = NodeRole.CANDIDATE;
     }
 
-    public boolean receiveVoteRequest(int candidateTerm, String candidateId) {
+    public boolean receiveVoteRequest(int candidateTerm, String candidateId, int candidateLogLength) {
         if (candidateTerm < this.currentTerm) {
             return false;
         }
@@ -68,7 +68,10 @@ public class RaftNode {
             this.role = NodeRole.FOLLOWER;
         }
 
-        if (this.votedFor == null || this.votedFor.equals(candidateId)) {
+        boolean alreadyVotedForSomeoneElse = this.votedFor != null && !this.votedFor.equals(candidateId);
+        boolean candidateLogIsUpToDate = candidateLogLength >= this.log.size();
+
+        if (!alreadyVotedForSomeoneElse && candidateLogIsUpToDate) {
             this.votedFor = candidateId;
             return true;
         }
