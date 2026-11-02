@@ -13,19 +13,27 @@ public class RaftNode {
     private NodeRole role;
     private final List<LogEntry> log;
     private final WriteAheadLog writeAheadLog;
+    private final NodeState nodeState;
 
-    public RaftNode(String nodeId, Path logFilePath) throws IOException {
+    public RaftNode(String nodeId, Path logFilePath, Path stateFilePath) throws IOException {
         this.nodeId = nodeId;
-        this.currentTerm = 0;
-        this.votedFor = null;
         this.role = NodeRole.FOLLOWER;
+
         this.writeAheadLog = new WriteAheadLog(logFilePath);
         this.log = new ArrayList<>(writeAheadLog.readAll());
+
+        this.nodeState = new NodeState(stateFilePath);
+        this.currentTerm = nodeState.loadTerm();
+        this.votedFor = nodeState.loadVotedFor();
     }
 
     public void appendEntry(LogEntry entry) throws IOException {
         writeAheadLog.append(entry);
         log.add(entry);
+    }
+
+    private void persistState() throws IOException {
+        nodeState.save(currentTerm, votedFor);
     }
 
     public String getNodeId() {
@@ -48,25 +56,28 @@ public class RaftNode {
         return votedFor;
     }
 
-    public void setCurrentTerm(int currentTerm) {
+    public void setCurrentTerm(int currentTerm) throws IOException {
         this.currentTerm = currentTerm;
+        persistState();
     }
 
-    public void setVotedFor(String votedFor) {
+    public void setVotedFor(String votedFor) throws IOException {
         this.votedFor = votedFor;
+        persistState();
     }
 
     public void setRole(NodeRole role) {
         this.role = role;
     }
 
-    public void startElection() {
+    public void startElection() throws IOException {
         this.currentTerm = this.currentTerm + 1;
         this.votedFor = this.nodeId;
         this.role = NodeRole.CANDIDATE;
+        persistState();
     }
 
-    public boolean receiveVoteRequest(int candidateTerm, String candidateId, int candidateLogLength) {
+    public boolean receiveVoteRequest(int candidateTerm, String candidateId, int candidateLogLength) throws IOException {
         if (candidateTerm < this.currentTerm) {
             return false;
         }
@@ -82,9 +93,11 @@ public class RaftNode {
 
         if (!alreadyVotedForSomeoneElse && candidateLogIsUpToDate) {
             this.votedFor = candidateId;
+            persistState();
             return true;
         }
 
+        persistState();
         return false;
     }
 

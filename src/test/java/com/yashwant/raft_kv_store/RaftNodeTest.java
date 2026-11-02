@@ -14,7 +14,7 @@ public class RaftNodeTest {
     Path tempDir;
 
     private RaftNode newNode(String nodeId) throws IOException {
-        return new RaftNode(nodeId, tempDir.resolve(nodeId + ".log"));
+        return new RaftNode(nodeId, tempDir.resolve(nodeId + ".log"), tempDir.resolve(nodeId + ".state"));
     }
 
     @Test
@@ -160,19 +160,34 @@ public class RaftNodeTest {
         assertTrue(granted, "Node should grant the vote that revealed the higher term, since it has no prior vote this term");
         assertEquals("node-2", node.getVotedFor(), "Node should vote for the candidate that prompted the step-down");
     }
+
     @Test
     void nodeRecoversLogFromDiskAfterRestart() throws IOException {
         Path logFile = tempDir.resolve("recovery-test.log");
+        Path stateFile = tempDir.resolve("recovery-test.state");
 
-        RaftNode firstInstance = new RaftNode("node-1", logFile);
+        RaftNode firstInstance = new RaftNode("node-1", logFile, stateFile);
         firstInstance.appendEntry(new LogEntry(1, "x=5"));
         firstInstance.appendEntry(new LogEntry(1, "y=10"));
 
-        // Simulate a crash and restart: brand new RaftNode, same log file
-        RaftNode restartedInstance = new RaftNode("node-1", logFile);
+        RaftNode restartedInstance = new RaftNode("node-1", logFile, stateFile);
 
         assertEquals(2, restartedInstance.getLog().size(), "Restarted node should recover both entries from disk");
         assertEquals("x=5", restartedInstance.getLog().get(0).getCommand());
         assertEquals("y=10", restartedInstance.getLog().get(1).getCommand());
+    }
+
+    @Test
+    void nodeRecoversTermAndVoteFromDiskAfterRestart() throws IOException {
+        Path logFile = tempDir.resolve("state-recovery.log");
+        Path stateFile = tempDir.resolve("state-recovery.state");
+
+        RaftNode firstInstance = new RaftNode("node-1", logFile, stateFile);
+        firstInstance.receiveVoteRequest(5, "node-2", 0);
+
+        RaftNode restartedInstance = new RaftNode("node-1", logFile, stateFile);
+
+        assertEquals(5, restartedInstance.getCurrentTerm(), "Restarted node should recover its term from disk");
+        assertEquals("node-2", restartedInstance.getVotedFor(), "Restarted node should recover its vote from disk");
     }
 }
