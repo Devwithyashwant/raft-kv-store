@@ -8,8 +8,12 @@ public class NodeState {
 
     private final Path filePath;
 
-    public NodeState(Path filePath) {
+    public NodeState(Path filePath) throws IOException {
         this.filePath = filePath;
+        Path parentDir = filePath.getParent();
+        if (parentDir != null && !Files.exists(parentDir)) {
+            Files.createDirectories(parentDir);
+        }
     }
 
     public void save(int currentTerm, String votedFor) throws IOException {
