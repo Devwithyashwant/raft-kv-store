@@ -1,5 +1,7 @@
 package com.yashwant.raft_kv_store;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,48 +12,55 @@ public class RaftNode {
     private String votedFor;
     private NodeRole role;
     private final List<LogEntry> log;
+    private final WriteAheadLog writeAheadLog;
 
-
-    public RaftNode(String nodeId){
+    public RaftNode(String nodeId, Path logFilePath) throws IOException {
         this.nodeId = nodeId;
         this.currentTerm = 0;
         this.votedFor = null;
         this.role = NodeRole.FOLLOWER;
-        this.log = new ArrayList<>();
+        this.writeAheadLog = new WriteAheadLog(logFilePath);
+        this.log = new ArrayList<>(writeAheadLog.readAll());
     }
 
-    public String getNodeId(){
+    public void appendEntry(LogEntry entry) throws IOException {
+        writeAheadLog.append(entry);
+        log.add(entry);
+    }
+
+    public String getNodeId() {
         return nodeId;
     }
 
-    public int getCurrentTerm(){
+    public int getCurrentTerm() {
         return currentTerm;
     }
 
-    public NodeRole getRole(){
+    public NodeRole getRole() {
         return role;
     }
-    public List<LogEntry> getLog(){
+
+    public List<LogEntry> getLog() {
         return log;
     }
 
-    public void setCurrentTerm(int currentTerm){
-        this.currentTerm = currentTerm;
-    }
-
-    public void setVotedFor(String votedFor){
-        this.votedFor = votedFor;
-    }
-
-    public String getVotedFor(){
+    public String getVotedFor() {
         return votedFor;
     }
 
-    public void setRole(NodeRole role){
+    public void setCurrentTerm(int currentTerm) {
+        this.currentTerm = currentTerm;
+    }
+
+    public void setVotedFor(String votedFor) {
+        this.votedFor = votedFor;
+    }
+
+    public void setRole(NodeRole role) {
         this.role = role;
     }
 
-    public void startElection(){
+    public void startElection() {
         this.currentTerm = this.currentTerm + 1;
         this.votedFor = this.nodeId;
         this.role = NodeRole.CANDIDATE;
@@ -80,9 +89,7 @@ public class RaftNode {
     }
 
     @Override
-    public String toString(){
-        return "RaftNode{id='" + nodeId + "' , term=" +currentTerm + ", role =" + role + ", logSize=" +log.size() + "}";
+    public String toString() {
+        return "RaftNode{id='" + nodeId + "', term=" + currentTerm + ", role=" + role + ", logSize=" + log.size() + "}";
     }
-
 }
-

@@ -1,13 +1,25 @@
 package com.yashwant.raft_kv_store;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Path;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 public class RaftNodeTest {
 
+    @TempDir
+    Path tempDir;
+
+    private RaftNode newNode(String nodeId) throws IOException {
+        return new RaftNode(nodeId, tempDir.resolve(nodeId + ".log"));
+    }
+
     @Test
-    void newNodeStartsAsFollowerWithTermZero(){
-        RaftNode node = new RaftNode("node-1");
+    void newNodeStartsAsFollowerWithTermZero() throws IOException {
+        RaftNode node = newNode("node-1");
 
         assertEquals(0, node.getCurrentTerm());
         assertEquals(NodeRole.FOLLOWER, node.getRole());
@@ -15,8 +27,8 @@ public class RaftNodeTest {
     }
 
     @Test
-    void startElectionIncrementsTermAndBecomesCandidate() {
-        RaftNode node = new RaftNode("node-1");
+    void startElectionIncrementsTermAndBecomesCandidate() throws IOException {
+        RaftNode node = newNode("node-1");
 
         node.startElection();
 
@@ -26,8 +38,8 @@ public class RaftNodeTest {
     }
 
     @Test
-    void multipleElectionsKeepIncrementingTerm(){
-        RaftNode node = new RaftNode("node-1");
+    void multipleElectionsKeepIncrementingTerm() throws IOException {
+        RaftNode node = newNode("node-1");
         node.startElection();
         node.startElection();
         node.startElection();
@@ -36,8 +48,8 @@ public class RaftNodeTest {
     }
 
     @Test
-    void grantsVoteWhenNoPriorVoteAndSameOrHigherTerm() {
-        RaftNode node = new RaftNode("node-1");
+    void grantsVoteWhenNoPriorVoteAndSameOrHigherTerm() throws IOException {
+        RaftNode node = newNode("node-1");
 
         boolean granted = node.receiveVoteRequest(1, "node-2", 0);
 
@@ -47,8 +59,8 @@ public class RaftNodeTest {
     }
 
     @Test
-    void rejectsVoteFromOlderTerm() {
-        RaftNode node = new RaftNode("node-1");
+    void rejectsVoteFromOlderTerm() throws IOException {
+        RaftNode node = newNode("node-1");
         node.setCurrentTerm(5);
 
         boolean granted = node.receiveVoteRequest(3, "node-2", 0);
@@ -57,8 +69,8 @@ public class RaftNodeTest {
     }
 
     @Test
-    void rejectsSecondVoteRequestInSameTermFromDifferentCandidate() {
-        RaftNode node = new RaftNode("node-1");
+    void rejectsSecondVoteRequestInSameTermFromDifferentCandidate() throws IOException {
+        RaftNode node = newNode("node-1");
 
         node.receiveVoteRequest(1, "node-2", 0);
         boolean secondGranted = node.receiveVoteRequest(1, "node-3", 0);
@@ -68,24 +80,20 @@ public class RaftNodeTest {
     }
 
     @Test
-    void candidateBecomesLeaderWithMajorityVotes() {
-        RaftNode candidate = new RaftNode("node-1");
-        RaftNode follower1 = new RaftNode("node-2");
-        RaftNode follower2 = new RaftNode("node-3");
+    void candidateBecomesLeaderWithMajorityVotes() throws IOException {
+        RaftNode candidate = newNode("node-1");
+        RaftNode follower1 = newNode("node-2");
+        RaftNode follower2 = newNode("node-3");
 
         candidate.startElection();
 
-        int votesReceived = 1; // candidate votes for itself
+        int votesReceived = 1;
 
         boolean vote1 = follower1.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId(), 0);
-        if (vote1) {
-            votesReceived++;
-        }
+        if (vote1) votesReceived++;
 
         boolean vote2 = follower2.receiveVoteRequest(candidate.getCurrentTerm(), candidate.getNodeId(), 0);
-        if (vote2) {
-            votesReceived++;
-        }
+        if (vote2) votesReceived++;
 
         int clusterSize = 3;
         int majorityNeeded = (clusterSize / 2) + 1;
@@ -101,16 +109,15 @@ public class RaftNodeTest {
     }
 
     @Test
-    void candidateLosesElectionIfVotesAlreadyCastElsewhere() {
-        RaftNode candidate = new RaftNode("node-1");
-        RaftNode follower1 = new RaftNode("node-2");
-        RaftNode follower2 = new RaftNode("node-3");
+    void candidateLosesElectionIfVotesAlreadyCastElsewhere() throws IOException {
+        RaftNode candidate = newNode("node-1");
+        RaftNode follower1 = newNode("node-2");
+        RaftNode follower2 = newNode("node-3");
 
-        // Both followers already voted for a different candidate in term 1
         follower1.receiveVoteRequest(1, "node-4", 0);
         follower2.receiveVoteRequest(1, "node-4", 0);
 
-        candidate.startElection(); // candidate is now term 1, voted for itself
+        candidate.startElection();
 
         int votesReceived = 1;
 
@@ -128,22 +135,23 @@ public class RaftNodeTest {
         assertFalse(wonElection, "Candidate should lose - both other votes already committed elsewhere");
         assertEquals(1, votesReceived, "Only the candidate's own self-vote should count");
     }
-    @Test
-    void rejectsVoteWhenCandidateLogIsShorterThanVoterLog() {
-        RaftNode node = new RaftNode("node-1");
-        node.getLog().add(new LogEntry(1, "x=1"));
-        node.getLog().add(new LogEntry(1, "x=2"));
 
-        // Candidate claims only 1 log entry, but voter already has 2
+    @Test
+    void rejectsVoteWhenCandidateLogIsShorterThanVoterLog() throws IOException {
+        RaftNode node = newNode("node-1");
+        node.appendEntry(new LogEntry(1, "x=1"));
+        node.appendEntry(new LogEntry(1, "x=2"));
+
         boolean granted = node.receiveVoteRequest(1, "node-2", 1);
 
         assertFalse(granted, "Should reject candidate whose log is shorter than voter's own");
     }
+
     @Test
-    void leaderStepsDownWhenReceivingHigherTerm() {
-        RaftNode node = new RaftNode("node-1");
-        node.startElection(); // term becomes 1, node is CANDIDATE
-        node.setRole(NodeRole.LEADER); // simulate it having won and become leader
+    void leaderStepsDownWhenReceivingHigherTerm() throws IOException {
+        RaftNode node = newNode("node-1");
+        node.startElection();
+        node.setRole(NodeRole.LEADER);
 
         boolean granted = node.receiveVoteRequest(5, "node-2", 0);
 
