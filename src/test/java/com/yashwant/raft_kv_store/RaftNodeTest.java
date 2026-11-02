@@ -139,4 +139,17 @@ public class RaftNodeTest {
 
         assertFalse(granted, "Should reject candidate whose log is shorter than voter's own");
     }
+    @Test
+    void leaderStepsDownWhenReceivingHigherTerm() {
+        RaftNode node = new RaftNode("node-1");
+        node.startElection(); // term becomes 1, node is CANDIDATE
+        node.setRole(NodeRole.LEADER); // simulate it having won and become leader
+
+        boolean granted = node.receiveVoteRequest(5, "node-2", 0);
+
+        assertEquals(NodeRole.FOLLOWER, node.getRole(), "Leader should step down to follower on seeing a higher term");
+        assertEquals(5, node.getCurrentTerm(), "Node should adopt the higher term");
+        assertTrue(granted, "Node should grant the vote that revealed the higher term, since it has no prior vote this term");
+        assertEquals("node-2", node.getVotedFor(), "Node should vote for the candidate that prompted the step-down");
+    }
 }
