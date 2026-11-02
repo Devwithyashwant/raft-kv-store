@@ -160,4 +160,19 @@ public class RaftNodeTest {
         assertTrue(granted, "Node should grant the vote that revealed the higher term, since it has no prior vote this term");
         assertEquals("node-2", node.getVotedFor(), "Node should vote for the candidate that prompted the step-down");
     }
+    @Test
+    void nodeRecoversLogFromDiskAfterRestart() throws IOException {
+        Path logFile = tempDir.resolve("recovery-test.log");
+
+        RaftNode firstInstance = new RaftNode("node-1", logFile);
+        firstInstance.appendEntry(new LogEntry(1, "x=5"));
+        firstInstance.appendEntry(new LogEntry(1, "y=10"));
+
+        // Simulate a crash and restart: brand new RaftNode, same log file
+        RaftNode restartedInstance = new RaftNode("node-1", logFile);
+
+        assertEquals(2, restartedInstance.getLog().size(), "Restarted node should recover both entries from disk");
+        assertEquals("x=5", restartedInstance.getLog().get(0).getCommand());
+        assertEquals("y=10", restartedInstance.getLog().get(1).getCommand());
+    }
 }
