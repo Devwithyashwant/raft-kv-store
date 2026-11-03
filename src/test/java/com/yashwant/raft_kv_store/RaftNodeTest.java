@@ -190,4 +190,21 @@ public class RaftNodeTest {
         assertEquals(5, restartedInstance.getCurrentTerm(), "Restarted node should recover its term from disk");
         assertEquals("node-2", restartedInstance.getVotedFor(), "Restarted node should recover its vote from disk");
     }
+    @Test
+    void receivingHeartbeatResetsLastHeartbeatTime() throws IOException, InterruptedException {
+        RaftNode node = newNode("node-1");
+
+        long initialTime = node.getLastHeartbeatTime();
+
+        Thread.sleep(200);
+
+        node.receiveHeartbeat(1, "node-leader");
+
+        long afterHeartbeatTime = node.getLastHeartbeatTime();
+
+        assertTrue(afterHeartbeatTime > initialTime, "lastHeartbeatTime should be updated after receiving a heartbeat");
+
+        long elapsedSinceHeartbeat = System.currentTimeMillis() - node.getLastHeartbeatTime();
+        assertTrue(elapsedSinceHeartbeat < 100, "Elapsed time since last heartbeat should be very small immediately after receiving one, was: " + elapsedSinceHeartbeat);
+    }
 }

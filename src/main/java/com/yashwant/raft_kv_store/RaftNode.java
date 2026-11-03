@@ -14,6 +14,7 @@ public class RaftNode {
     private final List<LogEntry> log;
     private final WriteAheadLog writeAheadLog;
     private final NodeState nodeState;
+    private long lastHeartbeatTime;
 
     public RaftNode(String nodeId, Path logFilePath, Path stateFilePath) throws IOException {
         this.nodeId = nodeId;
@@ -25,6 +26,7 @@ public class RaftNode {
         this.nodeState = new NodeState(stateFilePath);
         this.currentTerm = nodeState.loadTerm();
         this.votedFor = nodeState.loadVotedFor();
+        this.lastHeartbeatTime = System.currentTimeMillis();
     }
 
     public void appendEntry(LogEntry entry) throws IOException {
@@ -48,6 +50,9 @@ public class RaftNode {
         return role;
     }
 
+    public long getLastHeartbeatTime() {
+        return lastHeartbeatTime;
+    }
     public List<LogEntry> getLog() {
         return log;
     }
@@ -70,11 +75,11 @@ public class RaftNode {
         this.role = role;
     }
 
-    public void startElection() throws IOException {
+    public void startElection() {
         this.currentTerm = this.currentTerm + 1;
         this.votedFor = this.nodeId;
         this.role = NodeRole.CANDIDATE;
-        persistState();
+        this.lastHeartbeatTime = System.currentTimeMillis();
     }
 
     public boolean receiveVoteRequest(int candidateTerm, String candidateId, int candidateLogLength) throws IOException {
@@ -113,6 +118,7 @@ public class RaftNode {
         }
 
         this.role = NodeRole.FOLLOWER;
+        this.lastHeartbeatTime = System.currentTimeMillis();
         System.out.println(this.nodeId + " received heartbeat from " + leaderId + " for term " + leaderTerm);
         return true;
     }
