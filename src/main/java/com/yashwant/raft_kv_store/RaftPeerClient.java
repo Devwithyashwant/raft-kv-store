@@ -24,4 +24,12 @@ public class RaftPeerClient {
                 .retrieve()
                 .body(VoteResponse.class);
     }
+    public AppendEntriesResponse sendAppendEntries(String peerBaseUrl, AppendEntriesRequest request) {
+        return restClient.post()
+                .uri(peerBaseUrl + "/appendEntries")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(AppendEntriesResponse.class);
+    }
 }

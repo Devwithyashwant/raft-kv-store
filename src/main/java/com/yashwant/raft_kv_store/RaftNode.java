@@ -16,6 +16,7 @@ public class RaftNode {
     private final NodeState nodeState;
     private long lastHeartbeatTime;
 
+
     public RaftNode(String nodeId, Path logFilePath, Path stateFilePath) throws IOException {
         this.nodeId = nodeId;
         this.role = NodeRole.FOLLOWER;
@@ -120,6 +121,28 @@ public class RaftNode {
         this.role = NodeRole.FOLLOWER;
         this.lastHeartbeatTime = System.currentTimeMillis();
         System.out.println(this.nodeId + " received heartbeat from " + leaderId + " for term " + leaderTerm);
+        return true;
+    }
+    public boolean receiveAppendEntries(int leaderTerm, String leaderId, int entryTerm, String command) throws IOException {
+        if (leaderTerm < this.currentTerm) {
+            System.out.println(this.nodeId + " rejected append from " + leaderId + " (stale term " + leaderTerm + ", current term is " + this.currentTerm + ")");
+            return false;
+        }
+
+        if (leaderTerm > this.currentTerm) {
+            this.currentTerm = leaderTerm;
+            this.votedFor = null;
+            persistState();
+        }
+
+        this.role = NodeRole.FOLLOWER;
+        this.lastHeartbeatTime = System.currentTimeMillis();
+
+        if (command != null) {
+            appendEntry(new LogEntry(entryTerm, command));
+            System.out.println(this.nodeId + " appended entry from " + leaderId + ": " + command);
+        }
+
         return true;
     }
 
