@@ -1,10 +1,8 @@
 package com.yashwant.raft_kv_store;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -15,7 +13,7 @@ public class RaftController {
     private final RaftNode node;
 
     @Autowired
-    private RaftPeerClient peerClient;
+    private ElectionService electionService;
 
     public RaftController(RaftNode node) {
         this.node = node;
@@ -32,9 +30,9 @@ public class RaftController {
         return new VoteResponse(granted, node.getCurrentTerm());
     }
 
-    @GetMapping("/testCallPeer")
-    public VoteResponse testCallPeer(@RequestParam String peerUrl) {
-        VoteRequest request = new VoteRequest(node.getCurrentTerm() + 1, node.getNodeId(), node.getLog().size());
-        return peerClient.requestVote(peerUrl, request);
+    @PostMapping("/triggerElection")
+    public String triggerElection() throws IOException {
+        electionService.runElection();
+        return node.toString();
     }
 }
