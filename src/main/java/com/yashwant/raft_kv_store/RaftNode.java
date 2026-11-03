@@ -100,6 +100,22 @@ public class RaftNode {
         persistState();
         return false;
     }
+    public boolean receiveHeartbeat(int leaderTerm, String leaderId) throws IOException {
+        if (leaderTerm < this.currentTerm) {
+            System.out.println(this.nodeId + " rejected heartbeat from " + leaderId + " (stale term " + leaderTerm + ", current term is " + this.currentTerm + ")");
+            return false;
+        }
+
+        if (leaderTerm > this.currentTerm) {
+            this.currentTerm = leaderTerm;
+            this.votedFor = null;
+            persistState();
+        }
+
+        this.role = NodeRole.FOLLOWER;
+        System.out.println(this.nodeId + " received heartbeat from " + leaderId + " for term " + leaderTerm);
+        return true;
+    }
 
     @Override
     public String toString() {

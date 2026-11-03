@@ -35,4 +35,10 @@ public class RaftController {
         electionService.runElection();
         return node.toString();
     }
+
+    @PostMapping("/heartbeat")
+    public VoteResponse heartbeat(@RequestBody VoteRequest request) throws IOException {
+        boolean accepted = node.receiveHeartbeat(request.getCandidateTerm(), request.getCandidateId());
+        return new VoteResponse(accepted, node.getCurrentTerm());
+    }
 }

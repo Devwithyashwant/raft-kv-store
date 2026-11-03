@@ -16,4 +16,12 @@ public class RaftPeerClient {
                 .retrieve()
                 .body(VoteResponse.class);
     }
+    public VoteResponse sendHeartbeat(String peerBaseUrl, VoteRequest request) {
+        return restClient.post()
+                .uri(peerBaseUrl + "/heartbeat")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(VoteResponse.class);
+    }
 }

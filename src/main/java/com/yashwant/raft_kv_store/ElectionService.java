@@ -1,6 +1,7 @@
 package com.yashwant.raft_kv_store;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,12 +19,13 @@ public class ElectionService {
         this.node = node;
         this.peerClient = peerClient;
         this.peerUrls = peerUrls;
+        System.out.println(node.getNodeId() + " configured with peers: " + peerUrls);
     }
 
     public void runElection() throws IOException {
         node.startElection();
 
-        int votesReceived = 1; // self-vote, already counted inside startElection()
+        int votesReceived = 1;
 
         VoteRequest request = new VoteRequest(
                 node.getCurrentTerm(),
@@ -42,7 +44,7 @@ public class ElectionService {
             }
         }
 
-        int clusterSize = peerUrls.size() + 1; // peers + this node
+        int clusterSize = peerUrls.size() + 1;
         int majorityNeeded = (clusterSize / 2) + 1;
 
         if (votesReceived >= majorityNeeded) {
@@ -50,6 +52,25 @@ public class ElectionService {
             System.out.println(node.getNodeId() + " won the election with " + votesReceived + " votes, is now LEADER for term " + node.getCurrentTerm());
         } else {
             System.out.println(node.getNodeId() + " lost the election with only " + votesReceived + " votes");
+        }
+    }
+
+    @Scheduled(fixedRate = 1000)
+    public void sendHeartbeatsIfLeader() {
+        if (node.getRole() != NodeRole.LEADER) {
+            return;
+        }
+
+        System.out.println(node.getNodeId() + " sending heartbeat for term " + node.getCurrentTerm());
+
+        VoteRequest heartbeat = new VoteRequest(node.getCurrentTerm(), node.getNodeId(), node.getLog().size());
+
+        for (String peerUrl : peerUrls) {
+            try {
+                peerClient.sendHeartbeat(peerUrl, heartbeat);
+            } catch (Exception e) {
+                System.out.println("Failed to send heartbeat to " + peerUrl + ": " + e.getMessage());
+            }
         }
     }
 }
