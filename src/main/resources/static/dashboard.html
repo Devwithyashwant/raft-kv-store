@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Raft KV Cluster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #eef0f2;
+    --grid-line: #dde2e8;
+    --ink: #1b2430;
+    --muted: #5b6672;
+    --leader: #166534;
+    --leader-soft: #e3f1e8;
+    --follower: #334155;
+    --follower-soft: #eef1f4;
+    --candidate: #92400e;
+    --candidate-soft: #fbf0e2;
+    --down: #9f1d1d;
+    --down-soft: #f8ebeb;
+    --line: #b7c0cb;
+    --panel: #ffffff;
+    --panel-border: #d7dce2;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--paper);
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 44px 28px 60px;
+  }
+
+  header h1 {
+    font-size: 21px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .status-line {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    max-width: 62ch;
+  }
+
+  .status-line b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%;
+    max-width: 920px;
+    height: 460px;
+    margin: 36px auto 40px;
+  }
+
+  svg.links { position: absolute; inset: 0; width: 100%; height: 100%; }
+  svg.links line { stroke: var(--line); stroke-width: 2; }
+
+  .pulse {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--leader);
+    top: 0;
+    left: 0;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 0 0 3px rgba(22,101,52,0.15);
+  }
+
+  .node {
+    position: absolute;
+    width: 206px;
+    transform: translate(-50%, -50%);
+    background: var(--follower-soft);
+    border: 1.5px solid var(--follower);
+    border-radius: 6px;
+    padding: 14px 16px;
+    transition: background 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+  }
+
+  .node.leader {
+    background: var(--leader-soft);
+    border: 2px solid var(--leader);
+    width: 226px;
+    box-shadow: 0 2px 14px rgba(22,101,52,0.12);
+  }
+
+  .node.candidate {
+    background: var(--candidate-soft);
+    border-color: var(--candidate);
+  }
+
+  .node.down {
+    background: var(--down-soft);
+    border: 1.5px dashed var(--down);
+    opacity: 0.75;
+  }
+
+  .node-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+
+  .node-id {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .node-role {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .node.leader .node-role { color: var(--leader); font-weight: 600; }
+  .node.candidate .node-role { color: var(--candidate); }
+  .node.down .node-role { color: var(--down); font-style: italic; }
+
+  .node-caption {
+    font-size: 10.5px;
+    color: var(--leader);
+    margin: -4px 0 8px;
+  }
+
+  .node-stats {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    row-gap: 3px;
+  }
+  .node-stats b { color: var(--ink); font-weight: 600; }
+
+  .node-log {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(0,0,0,0.08);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--muted);
+    max-height: 58px;
+    overflow: hidden;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 20px 22px;
+    max-width: 640px;
+  }
+
+  .panel h2 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+
+  .write-row { display: flex; gap: 10px; }
+
+  input[type=text] {
+    flex: 1;
+    background: var(--paper);
+    border: 1px solid var(--panel-border);
+    border-radius: 5px;
+    padding: 9px 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  input[type=text]:focus { outline: 2px solid var(--leader); outline-offset: 1px; }
+
+  button {
+    background: var(--ink);
+    border: none;
+    color: #fff;
+    font-weight: 500;
+    font-size: 13px;
+    padding: 9px 18px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  button:hover { background: #30404f; }
+
+  #writeResult {
+    margin-top: 10px;
+    font-size: 12.5px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--muted);
+    min-height: 16px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 20px;
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Raft KV cluster</h1>
+    <div class="status-line" id="statusLine">Connecting to nodes&hellip;</div>
+  </header>
+
+  <div class="stage" id="stage">
+    <svg class="links">
+      <line x1="460" y1="90" x2="220" y2="400"></line>
+      <line x1="460" y1="90" x2="700" y2="400"></line>
+      <line x1="220" y1="400" x2="700" y2="400"></line>
+    </svg>
+    <div class="pulse" id="pulseA"></div>
+    <div class="pulse" id="pulseB"></div>
+    <div class="node" id="box-node-1" style="left:460px; top:90px;"></div>
+    <div class="node" id="box-node-2" style="left:220px; top:400px;"></div>
+    <div class="node" id="box-node-3" style="left:700px; top:400px;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Submit a write</h2>
+    <div class="write-row">
+      <input type="text" id="commandInput" placeholder="SET x=42" />
+      <button onclick="submitWrite()">Submit</button>
+    </div>
+    <div id="writeResult"></div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--leader)"></span>leader</span>
+      <span><span class="swatch" style="background:var(--candidate)"></span>candidate</span>
+      <span><span class="swatch" style="background:var(--follower)"></span>follower</span>
+      <span><span class="swatch" style="background:var(--down)"></span>unreachable</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const NODES = [
+    { id: 'node-1', url: 'http://localhost:8081', x: 460, y: 90 },
+    { id: 'node-2', url: 'http://localhost:8082', x: 220, y: 400 },
+    { id: 'node-3', url: 'http://localhost:8083', x: 700, y: 400 },
+  ];
+
+  const nodeBoxes = Object.fromEntries(NODES.map(n => [n.id, document.getElementById('box-' + n.id)]));
+  const pulseA = document.getElementById('pulseA');
+  const pulseB = document.getElementById('pulseB');
+  const statusLine = document.getElementById('statusLine');
+
+  async function fetchStatus(node) {
+    try {
+      const res = await fetch(node.url + '/status', { cache: 'no-store' });
+      if (!res.ok) throw new Error('bad status');
+      const data = await res.json();
+      return { ...node, ok: true, ...data };
+    } catch (e) {
+      return { ...node, ok: false };
+    }
+  }
+
+  function roleClass(state) {
+    if (!state.ok) return 'down';
+    return (state.role || 'FOLLOWER').toLowerCase();
+  }
+
+  function renderNode(state) {
+    const el = nodeBoxes[state.id];
+    const cls = roleClass(state);
+    el.className = 'node ' + cls;
+
+    if (!state.ok) {
+      el.innerHTML = `
+        <div class="node-top">
+          <span class="node-id">${state.id}</span>
+          <span class="node-role">unreachable</span>
+        </div>
+        <div class="node-stats"><span>last seen on</span><b>:${state.url.split(':').pop()}</b></div>`;
+      return;
+    }
+
+    const log = (state.log || []).slice(-3).reverse()
+      .map(e => `term ${e.term} &middot; ${e.command}`).join('<br>') || 'no entries yet';
+
+    el.innerHTML = `
+      <div class="node-top">
+        <span class="node-id">${state.nodeId}</span>
+        <span class="node-role">${state.role.toLowerCase()}</span>
+      </div>
+      ${cls === 'leader' ? '<div class="node-caption">sending heartbeats</div>' : ''}
+      <div class="node-stats">
+        <span>term</span><b>${state.term}</b>
+        <span>voted for</span><b>${state.votedFor || '&mdash;'}</b>
+        <span>log size</span><b>${state.logSize}</b>
+      </div>
+      <div class="node-log">${log}</div>`;
+  }
+
+  function firePulse(dot, from, to) {
+    dot.getAnimations().forEach(a => a.cancel());
+    dot.style.opacity = '1';
+    dot.animate(
+      [
+        { transform: `translate(${from.x - 4.5}px, ${from.y - 4.5}px)`, opacity: 1 },
+        { transform: `translate(${to.x - 4.5}px, ${to.y - 4.5}px)`, opacity: 0.2 },
+      ],
+      { duration: 620, easing: 'ease-in-out', fill: 'forwards' }
+    );
+  }
+
+  let lastStates = [];
+
+  async function refresh() {
+    const states = await Promise.all(NODES.map(fetchStatus));
+    lastStates = states;
+    states.forEach(renderNode);
+
+    const reachable = states.filter(s => s.ok);
+    const leader = reachable.find(s => s.role === 'LEADER');
+
+    if (leader) {
+      const leaderNode = NODES.find(n => n.id === leader.id);
+      const others = NODES.filter(n => n.id !== leader.id && states.find(s => s.id === n.id && s.ok));
+      if (others[0]) firePulse(pulseA, leaderNode, others[0]);
+      if (others[1]) firePulse(pulseB, leaderNode, others[1]);
+      statusLine.innerHTML = `<b>${leader.nodeId}</b> is leading in term <b>${leader.term}</b> &mdash; ${reachable.length} of ${NODES.length} nodes reachable.`;
+    } else {
+      pulseA.style.opacity = '0';
+      pulseB.style.opacity = '0';
+      statusLine.textContent = reachable.length
+        ? `No leader right now (${reachable.length} of ${NODES.length} nodes reachable) \u2014 an election should resolve this shortly.`
+        : 'No nodes reachable.';
+    }
+  }
+
+  async function submitWrite() {
+    const command = document.getElementById('commandInput').value.trim();
+    const resultEl = document.getElementById('writeResult');
+    if (!command) { resultEl.textContent = 'Enter a command first.'; return; }
+
+    const leader = lastStates.find(s => s.ok && s.role === 'LEADER');
+    if (!leader) {
+      resultEl.textContent = 'No leader right now — cluster may be mid-election, try again in a second.';
+      return;
+    }
+
+    resultEl.textContent = `Sending to ${leader.nodeId}...`;
+    try {
+      const res = await fetch(`${leader.url}/write?command=${encodeURIComponent(command)}`, { method: 'POST' });
+      const text = await res.text();
+      resultEl.textContent = `${leader.nodeId} \u2192 ${text}`;
+      document.getElementById('commandInput').value = '';
+    } catch (e) {
+      resultEl.textContent = 'Request failed: ' + e.message;
+    }
+  }
+
+  document.getElementById('commandInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitWrite();
+  });
+
+  refresh();
+  setInterval(refresh, 700);
+</script>
+
+</body>
+</html>
+

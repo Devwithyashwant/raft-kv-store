@@ -1,12 +1,17 @@
 package com.yashwant.raft_kv_store;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 public class RaftController {
@@ -71,5 +76,29 @@ public class RaftController {
         } else {
             return "FAILED: could not reach majority";
         }
+    }
+
+    @GetMapping("/status")
+    public Map<String, Object> status() {
+        List<LogEntry> log = node.getLog();
+
+        List<Map<String, Object>> logEntries = log.stream()
+                .map(entry -> {
+                    Map<String, Object> e = new LinkedHashMap<>();
+                    e.put("term", entry.getTerm());
+                    e.put("command", entry.getCommand());
+                    return e;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("nodeId", node.getNodeId());
+        response.put("role", node.getRole());
+        response.put("term", node.getCurrentTerm());
+        response.put("votedFor", node.getVotedFor());
+        response.put("logSize", log.size());
+        response.put("log", logEntries);
+        response.put("lastHeartbeatTime", node.getLastHeartbeatTime());
+        return response;
     }
 }
