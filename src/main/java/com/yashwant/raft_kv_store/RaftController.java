@@ -56,6 +56,8 @@ public class RaftController {
         boolean success = node.receiveAppendEntries(
                 request.getLeaderTerm(),
                 request.getLeaderId(),
+                request.getPrevLogIndex(),
+                request.getPrevLogTerm(),
                 request.getEntryTerm(),
                 request.getCommand()
         );

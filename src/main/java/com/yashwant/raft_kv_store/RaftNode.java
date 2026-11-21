@@ -16,7 +16,6 @@ public class RaftNode {
     private final NodeState nodeState;
     private long lastHeartbeatTime;
 
-
     public RaftNode(String nodeId, Path logFilePath, Path stateFilePath) throws IOException {
         this.nodeId = nodeId;
         this.role = NodeRole.FOLLOWER;
@@ -92,6 +91,13 @@ public class RaftNode {
             this.currentTerm = candidateTerm;
             this.votedFor = null;
             this.role = NodeRole.FOLLOWER;
+            // Stepping down because we saw a higher term means someone out there
+            // is actively running for election. Reset our own clock so we don't
+            // immediately turn around and start a competing election a few
+            // hundred milliseconds later - that was causing a leader that had
+            // just stepped down (after a losing candidate's vote request alone)
+            // to re-trigger its own election almost instantly, over and over.
+            this.lastHeartbeatTime = System.currentTimeMillis();
         }
 
         boolean alreadyVotedForSomeoneElse = this.votedFor != null && !this.votedFor.equals(candidateId);
@@ -99,6 +105,11 @@ public class RaftNode {
 
         if (!alreadyVotedForSomeoneElse && candidateLogIsUpToDate) {
             this.votedFor = candidateId;
+            // Also reset here: if we just granted our vote to a candidate, give
+            // them a real chance to win and start sending heartbeats before our
+            // own timer could also expire and make us a competing candidate in
+            // the same term.
+            this.lastHeartbeatTime = System.currentTimeMillis();
             persistState();
             return true;
         }
@@ -123,7 +134,14 @@ public class RaftNode {
         System.out.println(this.nodeId + " received heartbeat from " + leaderId + " for term " + leaderTerm);
         return true;
     }
-    public boolean receiveAppendEntries(int leaderTerm, String leaderId, int entryTerm, String command) throws IOException {
+
+    /**
+     * @param prevLogIndex 1-based index of the log entry that should already exist
+     *                     immediately before the new entry (0 means "this is the
+     *                     very first entry, nothing should precede it").
+     * @param prevLogTerm  the term that entry at prevLogIndex is expected to have.
+     */
+    public boolean receiveAppendEntries(int leaderTerm, String leaderId, int prevLogIndex, int prevLogTerm, int entryTerm, String command) throws IOException {
         if (leaderTerm < this.currentTerm) {
             System.out.println(this.nodeId + " rejected append from " + leaderId + " (stale term " + leaderTerm + ", current term is " + this.currentTerm + ")");
             return false;
@@ -138,10 +156,28 @@ public class RaftNode {
         this.role = NodeRole.FOLLOWER;
         this.lastHeartbeatTime = System.currentTimeMillis();
 
-        if (command != null) {
+        // Log matching check: refuse to append if we don't already have the
+        // entry the leader says should come right before this one. This is
+        // what stops a follower that missed entries while it was down from
+        // ending up with a permanent gap in its log - it rejects, and the
+        // leader (ReplicationService) backs off and retries with an earlier
+        // entry until it finds where this follower's log actually lines up.
+        if (prevLogIndex > 0) {
+            boolean missingPrevEntry = this.log.size() < prevLogIndex;
+            boolean prevEntryTermMismatch = !missingPrevEntry && this.log.get(prevLogIndex - 1).getTerm() != prevLogTerm;
+            if (missingPrevEntry || prevEntryTermMismatch) {
+                System.out.println(this.nodeId + " rejected append from " + leaderId + ": log mismatch at index " + prevLogIndex + " (have " + this.log.size() + " entries)");
+                return false;
+            }
+        }
+
+        if (this.log.size() == prevLogIndex) {
+            // This is exactly the next new entry we're expecting - append it.
             appendEntry(new LogEntry(entryTerm, command));
             System.out.println(this.nodeId + " appended entry from " + leaderId + ": " + command);
         }
+        // else this.log.size() > prevLogIndex: we already have this entry
+        // (a retried/duplicate append) - nothing to do, just acknowledge it.
 
         return true;
     }

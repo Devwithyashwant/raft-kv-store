@@ -14,15 +14,20 @@ public class ElectionService {
     private final RaftNode node;
     private final RaftPeerClient peerClient;
     private final List<String> peerUrls;
-    private final long electionTimeoutMillis;
+    private final Random random = new Random();
+    private volatile long electionTimeoutMillis;
 
     public ElectionService(RaftNode node, RaftPeerClient peerClient,
                            @Value("${raft.node.peers}") List<String> peerUrls) {
         this.node = node;
         this.peerClient = peerClient;
         this.peerUrls = peerUrls;
-        this.electionTimeoutMillis = 3000 + new Random().nextInt(2000);
+        this.electionTimeoutMillis = randomTimeout();
         System.out.println(node.getNodeId() + " configured with peers: " + peerUrls + ", election timeout: " + electionTimeoutMillis + "ms");
+    }
+
+    private long randomTimeout() {
+        return 3000 + random.nextInt(2000);
     }
 
     public void runElection() throws IOException {
@@ -57,6 +62,12 @@ public class ElectionService {
             node.setRole(NodeRole.FOLLOWER);
             System.out.println(node.getNodeId() + " lost the election with only " + votesReceived + " votes");
         }
+
+        // Re-randomize the timeout after every attempt (won or lost). Without this,
+        // two nodes with similar fixed timeouts can keep tying forever every cycle -
+        // a real split-vote livelock. Real Raft implementations re-randomize for
+        // exactly this reason.
+        electionTimeoutMillis = randomTimeout();
     }
 
     @Scheduled(fixedRate = 1000)

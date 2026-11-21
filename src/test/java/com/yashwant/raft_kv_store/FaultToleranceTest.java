@@ -74,8 +74,10 @@ class FaultToleranceTest {
 
         LogEntry committedEntry = new LogEntry(node2.getCurrentTerm(), "x=5");
         node2.appendEntry(committedEntry);
-        node1.receiveAppendEntries(node2.getCurrentTerm(), node2.getNodeId(), committedEntry.getTerm(), committedEntry.getCommand());
-        node3.receiveAppendEntries(node2.getCurrentTerm(), node2.getNodeId(), committedEntry.getTerm(), committedEntry.getCommand());
+        // prevLogIndex=0, prevLogTerm=0: this is the first entry in node1/node3's
+        // logs, so there's nothing expected to precede it.
+        node1.receiveAppendEntries(node2.getCurrentTerm(), node2.getNodeId(), 0, 0, committedEntry.getTerm(), committedEntry.getCommand());
+        node3.receiveAppendEntries(node2.getCurrentTerm(), node2.getNodeId(), 0, 0, committedEntry.getTerm(), committedEntry.getCommand());
 
         // node-2 "dies" - node-1 takes over, using its own (now up-to-date) log
         node1.startElection();
